@@ -69,7 +69,42 @@ pip install -r requirements.txt
 
 You can switch database from the **Database** dropdown at the top without going back to the connect screen.
 
-### 3. Import Excel / CSV
+### 3. Script data as INSERT statements
+
+Open it with **⇩ Data → INSERT** (or Ctrl+Shift+D). You can also right-click a table → **Script data (INSERT)…**.
+
+1. Type a SELECT, e.g. `SELECT * FROM EMPLOYEE WHERE EMP_ID='1001'`. Leave out the WHERE to script every row.
+2. **Target table** is filled in from the FROM clause; edit it if needed. Queries with a JOIN, subquery or CTE show a warning so you can check the target.
+3. Choose **Output**:
+   - **Editor**: up to 20,000 rows. Then use Copy / Save .sql as usual.
+   - **File…**: any number of rows, written as they are read.
+4. Press **Generate INSERTs** (Ctrl+Enter).
+
+Each row becomes one statement, in this style:
+
+```
+INSERT INTO EMPLOYEE (COMP_CODE,EMP_ID,BIRTH_DATE,AGE,...)
+VALUES (N'ACME',N'1001','19900101 00:00:00',36,...)
+```
+
+How values are written:
+
+| Value | Written as |
+|---|---|
+| text | `N'...'` (quotes doubled) |
+| empty | `NULL` |
+| numbers | as-is |
+| dates | `'YYYYMMDD HH:MM:SS[.fff]'`, keeping full precision |
+| binary | `0x...` |
+
+How columns are handled:
+- Computed and rowversion columns are skipped.
+- If the identity column is included, the script is wrapped in `SET IDENTITY_INSERT … ON/OFF` (this can be turned off).
+- Every column in the SELECT must belong to the target table. Aliases and expressions are rejected before anything is generated.
+
+Only a single SELECT (or WITH … SELECT) is accepted. The query runs inside a transaction that is always rolled back, so nothing is changed.
+
+### 4. Import Excel / CSV
 
 Open it from **📂 Import data…** (or Ctrl+I).
 
@@ -102,6 +137,7 @@ How data is stored:
 | Ctrl+S | Save script |
 | Ctrl+F | Focus object filter |
 | F5 | Refresh object list |
+| Ctrl+Shift+D | Data → INSERT |
 | Ctrl+I | Import data |
 | Ctrl+L | Show / hide log |
 

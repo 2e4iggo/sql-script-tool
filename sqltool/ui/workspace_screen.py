@@ -109,6 +109,7 @@ class WorkspaceScreen(tb.Frame):
 
         self.menu = tk.Menu(self, tearoff=False)
         self.menu.add_command(label="Generate script", command=self.generate)
+        self.menu.add_command(label="Script data (INSERT)…", command=self._script_data_selected)
         self.menu.add_command(label="Copy name(s)", command=self._copy_names)
         self.menu.add_separator()
         self.menu.add_command(label="Select all in group", command=self._select_group)
@@ -133,9 +134,12 @@ class WorkspaceScreen(tb.Frame):
         self.save_btn.pack(side="left", padx=(6, 0))
         tb.Button(tools, text="Clear", bootstyle="secondary-link",
                   command=self.clear_script).pack(side="left", padx=(6, 0))
-        self.app.register_busy(self.gen_btn, self.refresh_btn)
+        self.data_btn = tb.Button(tools, text="⇩ Data → INSERT", bootstyle="info-outline",
+                                  command=self.open_data_script)
+        self.data_btn.pack(side="left", padx=(12, 0))
+        self.app.register_busy(self.gen_btn, self.refresh_btn, self.data_btn)
 
-        tb.Label(tools, text="Ctrl+Enter generate · Ctrl+Shift+C copy · Ctrl+S save",
+        tb.Label(tools, text="Ctrl+Enter generate · Ctrl+Shift+C copy · Ctrl+S save · Ctrl+Shift+D data",
                  bootstyle="secondary", font=("Segoe UI", 8)).pack(side="right")
 
         opts = tb.Frame(box)
@@ -185,6 +189,8 @@ class WorkspaceScreen(tb.Frame):
         r.bind_all("<Control-s>", lambda e: self._if_visible(self.save_script))
         r.bind_all("<Control-f>", lambda e: self._if_visible(self._focus_filter))
         r.bind_all("<F5>", lambda e: self._if_visible(self.refresh_objects))
+        r.bind_all("<Control-Shift-D>", lambda e: self._if_visible(self.open_data_script))
+        r.bind_all("<Control-Shift-d>", lambda e: self._if_visible(self.open_data_script))
 
     def _if_visible(self, fn):
         if self.winfo_ismapped():
@@ -362,6 +368,23 @@ class WorkspaceScreen(tb.Frame):
             self.clipboard_clear()
             self.clipboard_append(names)
             self.app.status("Copied object names")
+
+    # ── data → INSERT ─────────────────────────────────────────────
+    def open_data_script(self, sql=None, target=None):
+        if self.app.busy:
+            self.app.toast("Another task is still running.", "warning")
+            return
+        from .data_script_dialog import DataScriptDialog
+        DataScriptDialog(self.app, sql=sql, target=target)
+
+    def _script_data_selected(self):
+        tables = [o for o in self.selected_objects() if o.type == "U"]
+        if not tables:
+            self.app.toast("Select a table to script its data.", "warning")
+            return
+        from ..datascript import select_all_sql, table_text
+        t = tables[0]
+        self.open_data_script(select_all_sql(t.schema, t.name), table_text(t.schema, t.name))
 
     def _select_group(self):
         sel = self.tree.selection()

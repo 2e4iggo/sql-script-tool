@@ -99,6 +99,34 @@ class Database:
                         continue
                     raise
 
+    def stream(self, sql, params=(), batch=500, converters=None):
+        """Yield cursor.description, then lists of up to `batch` rows. Holds the lock for
+        the whole iteration and always rolls back, so nothing the query does is kept.
+        converters: {odbc_sql_type: fn(raw_bytes)}, active only during this call."""
+        with self._lock:
+            conn = self.conn
+            for sql_type, fn in (converters or {}).items():
+                conn.add_output_converter(sql_type, fn)
+            cur = conn.cursor()
+            try:
+                cur.execute(sql, params)
+                if not cur.description:
+                    raise ValueError("The statement returned no result set.")
+                yield cur.description
+                while True:
+                    rows = cur.fetchmany(batch)
+                    if not rows:
+                        break
+                    yield rows
+            finally:
+                try:
+                    cur.cancel()
+                    cur.close()
+                finally:
+                    conn.rollback()
+                    if converters:
+                        conn.clear_output_converters()
+
     def scalar(self, sql, params=()):
         rows = self.query(sql, params)
         return rows[0][0] if rows else None

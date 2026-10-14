@@ -10,7 +10,8 @@ This is the behaviour contract. Change it deliberately: the scripts the tool wri
 | Script tables | User tables (U): columns, PK, unique constraints; optional indexes, FKs, checks |
 | Batch | Many objects in one run, in dependency order |
 | Import | CSV, XLSX, XLSM, XLS (XLS needs `xlrd`) |
-| Out of scope | Synonyms, sequences, types, schemas, users/permissions, partitioning, columnstore / XML / spatial indexes (skipped with a comment), data scripting (INSERTs) |
+| Data | Rows of any single-table SELECT → one INSERT per row |
+| Out of scope | Synonyms, sequences, types, schemas, users/permissions, partitioning, columnstore / XML / spatial indexes (skipped with a comment), `sql_variant` columns in data scripting |
 
 ## 2. Connections
 
@@ -202,7 +203,62 @@ Each item runs in its own transaction:
 | `replace` and table exists | warning: will be DROPPED |
 | Otherwise | missing columns (error) / table-only columns (OK) / "columns match" |
 
-## 9. UI and threading
+## 9. Data → INSERT
+
+### Input guard (`datascript.validate_select`)
+
+Comments, string literals and bracketed names are masked before checking. The query is rejected when:
+- the first keyword isn't `SELECT` or `WITH`;
+- it contains more than one statement;
+- it contains any of `INSERT UPDATE DELETE MERGE EXEC EXECUTE DROP ALTER CREATE TRUNCATE GRANT REVOKE DENY BACKUP RESTORE DBCC SHUTDOWN KILL INTO DECLARE SET`.
+
+`Database.stream` also always rolls back.
+
+### Target table
+
+- `guess_target` returns the first `FROM name[.name…]` as written.
+- `needs_check` is set for `JOIN`, `APPLY`, `WITH`, `FROM (`, or a comma-join.
+- The right-click entry uses `table_text()`: the bare name for `dbo`, brackets only when needed.
+
+### Columns (`plan_columns`)
+
+When the target resolves to a user table:
+- result columns are matched case-insensitively and the table's own casing is used;
+- computed and `timestamp`/`rowversion` columns are skipped;
+- an included identity column sets `identity`;
+- unknown or duplicate names → error before any output.
+
+An unresolved target → all columns used as returned, plus a warning.
+
+### Output
+
+- **Statement layout** (one per row): `INSERT INTO <target as typed> (<ident(col)>,…)` newline `VALUES (<literal>,…)`.
+  - `ident` leaves a name bare if it matches `[A-Za-z_][A-Za-z0-9_@#$]*` and isn't a reserved word; otherwise it brackets it.
+  - Statements are separated by a single newline.
+- **Identity wrap:** `SET IDENTITY_INSERT <target> ON` / `OFF` lines around the statements (no `GO`).
+- **`sql_literal`:**
+
+  | Value | Output |
+  |---|---|
+  | `None` | `NULL` |
+  | `bool` | `1`/`0` |
+  | `int` | as-is |
+  | `Decimal` | `format(d,'f')` |
+  | `float` | `repr` |
+  | `str` / UUID | `N'…'` |
+  | bytes | `0x…` upper hex |
+  | `date` | `'YYYYMMDD'` |
+  | `time` | `'HH:MM:SS[.fff|.ffffff]'` |
+
+- **Date/time precision:** `DATETIME`, `SMALLDATETIME`, `DATETIME2` and `DATETIMEOFFSET` are read through raw ODBC output converters (SQL types 93 and -155), so no precision is lost.
+  - Fraction: none when zero; `.fff` when whole milliseconds; otherwise up to 7 digits with trailing zeros trimmed.
+  - `DATETIMEOFFSET` gets ` ±hh:mm`.
+  - Raw sizes handled: 16-byte TIMESTAMP_STRUCT, 8-byte native DATETIME (days since 1900 + 1/300 s ticks, rounded to ms), 4-byte SMALLDATETIME.
+- **Limits:**
+  - Editor output stops at 20,000 rows (`TooManyRows`), and the dialog offers to switch to File.
+  - File output streams with UTF-8 BOM and CRLF; a partial file is deleted on error or cancel.
+
+## 10. UI and threading
 
 - All database and file work runs in `worker.run_bg`. Results come back to the Tk thread through a polled queue.
 - `App.run` allows **one job at a time**:
@@ -212,7 +268,7 @@ Each item runs in its own transaction:
 - The window size is clamped to the screen on startup.
 - Themes are `bootstrap-dark` (default) and `bootstrap-light`. The editor and log use their own palettes, switched with the theme.
 
-## 10. Security
+## 11. Security
 
 - All catalog queries take user input only as `?` parameters.
 - Identifiers in generated DDL go through `q()` (brackets, `]` → `]]`). String literals go through `lit()` (`'` → `''`).

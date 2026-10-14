@@ -2,4 +2,4 @@
 
 APP_NAME = "SQLScriptTool"
 APP_TITLE = "SQL Script Tool"
-VERSION = "4.0"
+VERSION = "4.1"

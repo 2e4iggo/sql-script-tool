@@ -35,11 +35,13 @@ sqltool/
   metadata.py         catalog queries -> dataclasses (ObjectInfo, TableMeta, ColumnMeta, ...)
   scripting.py        PURE: metadata -> T-SQL text, ordering, compact(); no DB/UI imports
   importer.py         file discovery/reading/cleaning, build_plan, run_item
+  datascript.py       Data → INSERT: validate_select, guess_target, plan_columns, script_rows, ODBC datetime converters
   worker.py           run_bg(widget, fn(job), ...) thread + queue; Job.check()/progress()
   ui/
     connect_screen.py   saved list + form
     workspace_screen.py object browser + editor + toolbar options
     import_dialog.py    plan grid, preview/check, run
+    data_script_dialog.py  SELECT box, target, output Editor/File
     settings_dialog.py
     sql_text.py         Text + line-number gutter + regex highlighter
 tests/                pytest; scripting + importer, no DB
@@ -65,6 +67,7 @@ tests/                pytest; scripting + importer, no DB
   - Use the `bootstyle="primary-outline"`-style strings.
   - `tb.Toplevel(title=..., transient=..., size=(w, h))`.
 - **Style:** match the existing code: section banners `# ── name ───`, short docstrings, dataclasses, no type-hint noise.
+- **INSERT style is the user's:** bare identifiers (`ident()`), `N'…'`, `'YYYYMMDD HH:MM:SS'`, one statement per row on two lines, no spaces after commas. Keep it byte-compatible.
 - **Copy behaviour:** the user explicitly wants v3's compact copy (strip lines, drop blanks) as the default. Don't change it.
 
 ## Testing the UI

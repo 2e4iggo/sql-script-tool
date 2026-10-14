@@ -1,6 +1,9 @@
 """Pure script builders: metadata in, T-SQL text out. No DB or UI access here."""
+import datetime as dt
 import heapq
 import re
+import uuid
+from decimal import Decimal
 from dataclasses import dataclass, field
 
 from .metadata import FUNCTION_TYPES
@@ -284,6 +287,84 @@ def order_objects(objects, edges=()):
                 heapq.heappush(heap, key(by_id[u]))
     out += sorted((o for o in objects if o.object_id not in done), key=key)
     return out
+
+
+# ─────────────────────────────────────────────────────────────────
+#  DATA (INSERT statements)
+# ─────────────────────────────────────────────────────────────────
+
+RESERVED = set("""ADD ALL ALTER AND ANY AS ASC AUTHORIZATION BACKUP BEGIN BETWEEN BREAK BROWSE BULK BY
+CASCADE CASE CHECK CHECKPOINT CLOSE CLUSTERED COALESCE COLLATE COLUMN COMMIT COMPUTE CONSTRAINT
+CONTAINS CONTAINSTABLE CONTINUE CONVERT CREATE CROSS CURRENT CURRENT_DATE CURRENT_TIME
+CURRENT_TIMESTAMP CURRENT_USER CURSOR DATABASE DBCC DEALLOCATE DECLARE DEFAULT DELETE DENY DESC
+DISK DISTINCT DISTRIBUTED DOUBLE DROP DUMP ELSE END ERRLVL ESCAPE EXCEPT EXEC EXECUTE EXISTS EXIT
+EXTERNAL FETCH FILE FILLFACTOR FOR FOREIGN FREETEXT FREETEXTTABLE FROM FULL FUNCTION GOTO GRANT
+GROUP HAVING HOLDLOCK IDENTITY IDENTITY_INSERT IDENTITYCOL IF IN INDEX INNER INSERT INTERSECT INTO
+IS JOIN KEY KILL LEFT LIKE LINENO LOAD MERGE NATIONAL NOCHECK NONCLUSTERED NOT NULL NULLIF OF OFF
+OFFSETS ON OPEN OPENDATASOURCE OPENQUERY OPENROWSET OPENXML OPTION OR ORDER OUTER OVER PERCENT PIVOT
+PLAN PRECISION PRIMARY PRINT PROC PROCEDURE PUBLIC RAISERROR READ READTEXT RECONFIGURE REFERENCES
+REPLICATION RESTORE RESTRICT RETURN REVERT REVOKE RIGHT ROLLBACK ROWCOUNT ROWGUIDCOL RULE SAVE SCHEMA
+SECURITYAUDIT SELECT SEMANTICKEYPHRASETABLE SEMANTICSIMILARITYDETAILSTABLE SEMANTICSIMILARITYTABLE
+SESSION_USER SET SETUSER SHUTDOWN SOME STATISTICS SYSTEM_USER TABLE TABLESAMPLE TEXTSIZE THEN TO TOP
+TRAN TRANSACTION TRIGGER TRUNCATE TRY_CONVERT TSEQUAL UNION UNIQUE UNPIVOT UPDATE UPDATETEXT USE USER
+VALUES VARYING VIEW WAITFOR WHEN WHERE WHILE WITH WITHIN WRITETEXT""".split())
+
+_PLAIN_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_@#$]*$")
+
+
+def ident(name):
+    """Bare identifier when safe (matches the user's INSERT style), otherwise [bracketed]."""
+    name = str(name)
+    if _PLAIN_IDENT.match(name) and name.upper() not in RESERVED:
+        return name
+    return q(name)
+
+
+def _frac(micro):
+    if not micro:
+        return ""
+    return f".{micro // 1000:03d}" if micro % 1000 == 0 else f".{micro:06d}"
+
+
+class RawLiteral(str):
+    """Already-formatted T-SQL literal (e.g. full-precision DATETIME2 from an ODBC converter)."""
+
+
+def sql_literal(v):
+    """Python value (as returned by pyodbc) -> T-SQL literal."""
+    if v is None:
+        return "NULL"
+    if isinstance(v, RawLiteral):
+        return str(v)
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, Decimal):
+        return format(v, "f")
+    if isinstance(v, float):
+        return repr(v)
+    if isinstance(v, dt.datetime):
+        s = v.strftime("%Y%m%d %H:%M:%S") + _frac(v.microsecond)
+        if v.utcoffset() is not None:
+            off = int(v.utcoffset().total_seconds() // 60)
+            s += f" {'+' if off >= 0 else '-'}{abs(off) // 60:02d}:{abs(off) % 60:02d}"
+        return f"'{s}'"
+    if isinstance(v, dt.date):
+        return f"'{v.strftime('%Y%m%d')}'"
+    if isinstance(v, dt.time):
+        return f"'{v.strftime('%H:%M:%S')}{_frac(v.microsecond)}'"
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return "0x" + bytes(v).hex().upper()
+    if isinstance(v, uuid.UUID):
+        return f"N'{v}'"
+    return f"N'{lit(v)}'"
+
+
+def insert_statement(table_text, columns, row):
+    cols = ",".join(ident(c) for c in columns)
+    vals = ",".join(sql_literal(v) for v in row)
+    return f"INSERT INTO {table_text} ({cols})\nVALUES ({vals})"
 
 
 # ─────────────────────────────────────────────────────────────────

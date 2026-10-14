@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.1 (2026-10-14): Data → INSERT
+
+### Added
+- **Data → INSERT**: run a SELECT and get one `INSERT INTO … VALUES (…)` per row, in the same style as the hand-written scripts:
+  - bare column names, `N'…'` text
+  - `'YYYYMMDD HH:MM:SS'` dates
+  - Opened from the toolbar, Ctrl+Shift+D, or right-click a table → *Script data (INSERT)…*
+- Full date/time precision: `DATETIME2(7)` and `DATETIMEOFFSET` included. Verified by a round trip (script → delete → re-run → `EXCEPT` = 0 rows).
+- Computed and rowversion columns are skipped. `SET IDENTITY_INSERT` is added automatically when the identity column is included.
+- Read-only guard: only a single SELECT / WITH is accepted, and the query is always rolled back.
+- Output to the editor (≤ 20,000 rows) or streamed to a file (any size), with Cancel.
+
 ## 4.0 (2026-10-14): full rewrite of `SQL-Generate(v3).py`
 
 ### Script output differences from v3
