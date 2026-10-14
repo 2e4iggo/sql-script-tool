@@ -1,4 +1,6 @@
 """Main window: screens, menu, log panel, status bar, background-job plumbing."""
+import os
+import sys
 import time
 import tkinter as tk
 from tkinter import messagebox
@@ -23,6 +25,7 @@ class App:
         self.root = tb.Window(title=f"{APP_TITLE} {VERSION}", themename=self.settings.theme,
                               minsize=(900, 560))
         self._restore_geometry()
+        self._set_icon()
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
         self.store = ConnectionStore()
@@ -109,6 +112,16 @@ class App:
         r = self.root
         r.bind_all("<Control-i>", lambda e: self.open_import())
         r.bind_all("<Control-l>", lambda e: (self.log_var.set(not self.log_var.get()), self.toggle_log()))
+
+    def _set_icon(self):
+        # assets/ sits next to the sqltool package; inside the PyInstaller build it's under _MEIPASS
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ico = os.path.join(base, "assets", "app.ico")
+        if os.path.exists(ico):
+            try:
+                self.root.iconbitmap(default=ico)    # default= applies to dialogs too
+            except tk.TclError:
+                pass
 
     def _restore_geometry(self):
         """Restore the saved size, clamped so the window always fits on the current screen."""

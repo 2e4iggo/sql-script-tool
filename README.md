@@ -18,6 +18,16 @@ python "SQL-Generate(v4).py"
 
 > Double-clicking `SQL-Generate(v4).py` directly opens it with Python 3.13 on this PC. Python 3.13 doesn't have the required packages, so use the `.bat` file. The `.bat` always uses `C:\Python314\pythonw.exe`.
 
+## Windows app (.exe)
+
+A standalone build needs no Python on the target PC, only the SQL Server ODBC driver.
+
+- **Build:** double-click `build.bat`. The result is `dist\SQLScriptTool\SQLScriptTool.exe` (about 90 MB).
+- **Rebuild after every code change**, because the exe doesn't pick up source edits.
+- **Copying to another PC:** copy the *whole* `dist\SQLScriptTool` folder. The exe needs the `_internal` folder next to it.
+- **Check a build:** run `SQLScriptTool.exe --selftest report.txt`. It writes whether pyodbc, keyring, pandas/openpyxl, ttkbootstrap and the icon load.
+- The build is configured in `SQLScriptTool.spec`: one folder, no console, icon from `assets\app.ico`.
+
 ## Requirements
 
 - Python 3.12+ (developed on 3.14)

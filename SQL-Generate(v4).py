@@ -7,7 +7,30 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+def selftest(report_path):
+    """Check the bundled dependencies load (used to verify the PyInstaller build)."""
+    lines = []
+    for name, check in [
+        ("pyodbc drivers", lambda: __import__("pyodbc").drivers()),
+        ("keyring backend", lambda: type(__import__("keyring").get_keyring()).__name__),
+        ("pandas", lambda: __import__("pandas").__version__),
+        ("openpyxl", lambda: __import__("openpyxl").__version__),
+        ("ttkbootstrap", lambda: __import__("ttkbootstrap").__name__),
+        ("sqltool", lambda: __import__("sqltool.app", fromlist=["App"]).App.__name__),
+        ("icon", lambda: os.path.exists(os.path.join(getattr(sys, "_MEIPASS", ""), "assets", "app.ico"))),
+    ]:
+        try:
+            lines.append(f"OK   {name}: {check()}")
+        except Exception as e:
+            lines.append(f"FAIL {name}: {e!r}")
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--selftest":
+        selftest(sys.argv[2])
+        sys.exit(0)
     try:
         from sqltool.app import main
     except ImportError as e:
